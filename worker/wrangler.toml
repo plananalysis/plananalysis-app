@@ -1,0 +1,11 @@
+name = "plananalysis-ladder"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "plananalysis-ladder"
+database_id = "fbf44a23-f794-48bc-8ec0-2e208391acb5"
+
+[observability]
+enabled = true
