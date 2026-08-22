@@ -8,18 +8,21 @@ public enum UsageAggregator {
             var output = 0
             var cache = 0
             var count = 0
+            var usd = 0.0
             for d in deltas where d.at >= start {
                 input += d.input
                 output += d.output
                 cache += d.cacheRead
                 count += 1
+                usd += Pricing.costUsd(d)
             }
             return UsageWindow(
                 kind: kind,
                 inputTokens: input,
                 outputTokens: output,
                 cacheReadTokens: cache,
-                eventCount: count
+                eventCount: count,
+                equivUsd: usd
             )
         }
     }

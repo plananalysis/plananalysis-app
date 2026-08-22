@@ -10,6 +10,7 @@ type Entry = {
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
+  equivUsd: number;
   capturedAt: string;
 };
 
@@ -34,12 +35,12 @@ export default {
 async function ladder(url: URL, env: Env): Promise<Response> {
   const plan = url.searchParams.get("plan") ?? "";
   if (!PLAN_RE.test(plan)) return json({ error: "bad plan" }, 400);
-  const window = url.searchParams.get("window") ?? "5h";
+  const window = url.searchParams.get("window") ?? "30d";
   const rows = await env.DB.prepare(
-    `SELECT display_name, provider, input_tokens, output_tokens, cache_read_tokens, captured_at
+    `SELECT display_name, provider, input_tokens, output_tokens, cache_read_tokens, equiv_usd, captured_at
      FROM submissions
      WHERE plan_id = ? AND window = ?
-     ORDER BY output_tokens DESC, input_tokens DESC
+     ORDER BY equiv_usd DESC, output_tokens DESC
      LIMIT 50`
   )
     .bind(plan, window)
@@ -49,18 +50,28 @@ async function ladder(url: URL, env: Env): Promise<Response> {
       input_tokens: number;
       output_tokens: number;
       cache_read_tokens: number;
+      equiv_usd: number;
       captured_at: string;
     }>();
-  const entries = (rows.results ?? []).map((r, i) => ({
+  const list = rows.results ?? [];
+  const equivs = list.map((r) => Number(r.equiv_usd) || 0).sort((a, b) => a - b);
+  const entries = list.map((r, i) => ({
     rank: i + 1,
     displayName: r.display_name,
     provider: r.provider,
     inputTokens: r.input_tokens,
     outputTokens: r.output_tokens,
     cacheReadTokens: r.cache_read_tokens,
+    equivUsd: Number(r.equiv_usd) || 0,
     capturedAt: r.captured_at,
   }));
-  return json({ planId: plan, window, entries });
+  return json({
+    planId: plan,
+    window,
+    n: entries.length,
+    p50EquivUsd: percentile(equivs, 0.5),
+    entries,
+  });
 }
 
 async function upload(request: Request, env: Env): Promise<Response> {
@@ -77,17 +88,19 @@ async function upload(request: Request, env: Env): Promise<Response> {
   let accepted = 0;
   for (const e of entries) {
     if (!PLAN_RE.test(e.planId) || !NAME_RE.test(e.displayName)) continue;
-    if (e.window !== "5h") continue;
+    if (e.window !== "30d" && e.window !== "5h") continue;
     const id = `${e.planId}:${e.displayName}:${e.window}`;
+    const equiv = num(e.equivUsd);
     await env.DB.prepare(
       `INSERT INTO submissions
-        (id, plan_id, provider, display_name, window, input_tokens, output_tokens, cache_read_tokens, captured_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, plan_id, provider, display_name, window, input_tokens, output_tokens, cache_read_tokens, equiv_usd, captured_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
         provider=excluded.provider,
         input_tokens=excluded.input_tokens,
         output_tokens=excluded.output_tokens,
         cache_read_tokens=excluded.cache_read_tokens,
+        equiv_usd=excluded.equiv_usd,
         captured_at=excluded.captured_at,
         created_at=excluded.created_at`
     )
@@ -100,6 +113,26 @@ async function upload(request: Request, env: Env): Promise<Response> {
         int(e.inputTokens),
         int(e.outputTokens),
         int(e.cacheReadTokens),
+        equiv,
+        String(e.capturedAt ?? now),
+        now
+      )
+      .run();
+    await env.DB.prepare(
+      `INSERT INTO samples
+        (id, plan_id, provider, display_name, window, input_tokens, output_tokens, cache_read_tokens, equiv_usd, captured_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        crypto.randomUUID(),
+        e.planId,
+        String(e.provider ?? "").slice(0, 20),
+        e.displayName,
+        e.window,
+        int(e.inputTokens),
+        int(e.outputTokens),
+        int(e.cacheReadTokens),
+        equiv,
         String(e.capturedAt ?? now),
         now
       )
@@ -110,9 +143,20 @@ async function upload(request: Request, env: Env): Promise<Response> {
   return json({ accepted, plans });
 }
 
+function percentile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  const i = Math.floor((sorted.length - 1) * p);
+  return sorted[i] ?? 0;
+}
+
 function int(n: unknown): number {
   const v = Number(n);
   return Number.isFinite(v) ? Math.max(0, Math.min(1e15, Math.floor(v))) : 0;
+}
+
+function num(n: unknown): number {
+  const v = Number(n);
+  return Number.isFinite(v) ? Math.max(0, Math.min(1e9, v)) : 0;
 }
 
 function json(body: unknown, status = 200): Response {

@@ -10,6 +10,8 @@ public enum TokenExtractor {
             return claude(obj)
         case .codex:
             return codex(obj)
+        case .cursor:
+            return []
         }
     }
 
@@ -18,7 +20,16 @@ public enum TokenExtractor {
         guard let message = obj["message"] as? [String: Any],
               let usage = message["usage"] as? [String: Any]
         else { return [] }
-        return [delta(at: date(obj["timestamp"]), usage: usage, preferLast: false)]
+        return [delta(at: date(obj["timestamp"]), usage: usage, model: message["model"] as? String)]
+    }
+
+    public static func codexModel(fromJSONLine line: String) -> String? {
+        guard let data = line.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              obj["type"] as? String == "turn_context",
+              let payload = obj["payload"] as? [String: Any]
+        else { return nil }
+        return payload["model"] as? String
     }
 
     private static func codex(_ obj: [String: Any]) -> [TokenDelta] {
@@ -29,19 +40,19 @@ public enum TokenExtractor {
         let info = payload["info"] as? [String: Any] ?? [:]
         // last_token_usage is the increment; total_token_usage is cumulative.
         if let last = info["last_token_usage"] as? [String: Any] {
-            return [delta(at: date(obj["timestamp"]), usage: last, preferLast: true)]
+            return [delta(at: date(obj["timestamp"]), usage: last, model: nil)]
         }
         return []
     }
 
-    private static func delta(at: Date, usage: [String: Any], preferLast: Bool) -> TokenDelta {
-        _ = preferLast
-        return TokenDelta(
+    private static func delta(at: Date, usage: [String: Any], model: String?) -> TokenDelta {
+        TokenDelta(
             at: at,
             input: int(usage["input_tokens"]),
             output: int(usage["output_tokens"]) + int(usage["reasoning_output_tokens"]),
             cacheRead: int(usage["cache_read_input_tokens"]) + int(usage["cached_input_tokens"]),
-            cacheCreate: int(usage["cache_creation_input_tokens"])
+            cacheCreate: int(usage["cache_creation_input_tokens"]),
+            model: model
         )
     }
 

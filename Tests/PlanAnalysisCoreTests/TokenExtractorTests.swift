@@ -6,12 +6,13 @@ import Testing
 struct TokenExtractorTests {
     @Test
     func claudeAssistantUsage() {
-        let line = #"{"type":"assistant","timestamp":"2026-08-09T07:41:12.813Z","message":{"usage":{"input_tokens":10,"output_tokens":3,"cache_read_input_tokens":5}}}"#
+        let line = #"{"type":"assistant","timestamp":"2026-08-09T07:41:12.813Z","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":10,"output_tokens":3,"cache_read_input_tokens":5}}}"#
         let deltas = TokenExtractor.deltas(fromJSONLine: line, provider: .claude)
         #expect(deltas.count == 1)
         #expect(deltas[0].input == 10)
         #expect(deltas[0].output == 3)
         #expect(deltas[0].cacheRead == 5)
+        #expect(deltas[0].model == "claude-sonnet-4-6")
     }
 
     @Test

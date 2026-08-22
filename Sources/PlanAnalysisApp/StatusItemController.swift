@@ -20,11 +20,8 @@ final class StatusItemController {
     }
 
     func update(_ snapshot: UsageSnapshot) {
-        meter.ratios = snapshot.providers.prefix(2).map { p in
-            let w = p.window(.hours5)
-            // Local-only: intensity bar, not a vendor quota. Log-scaled to stay readable.
-            let t = Double(w.totalTokens)
-            return min(1, log10(1 + t) / 7.0)
+        meter.ratios = snapshot.providers.prefix(3).map { p in
+            min(1, log10(1 + p.window(.month).equivUsd * 10) / 4.0)
         }
         rebuildMenu(snapshot: snapshot)
     }
@@ -34,14 +31,15 @@ final class StatusItemController {
         menu.autoenablesItems = false
         if let snapshot {
             for p in snapshot.providers {
-                let w5 = p.window(.hours5)
-                let w7 = p.window(.week)
-                let title = "\(p.provider.rawValue.capitalized)  5h \(fmt(w5.totalTokens))   7d \(fmt(w7.totalTokens))"
+                let w = p.window(.month)
+                let label = p.planLabel.isEmpty ? p.provider.rawValue.capitalized : p.planLabel
+                let badge = p.planSource == .scanned ? "scanned" : "no subscription"
+                let title = "\(label)  \(money(w.equivUsd)) / 30d  · \(badge)"
                 let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
                 item.isEnabled = false
                 menu.addItem(item)
                 let sub = NSMenuItem(
-                    title: "  in \(fmt(w5.inputTokens)) · out \(fmt(w5.outputTokens)) · cache \(fmt(w5.cacheReadTokens)) · \(p.elapsedMs)ms / \(p.filesScanned) files",
+                    title: "  5h \(fmt(p.window(.hours5).totalTokens)) · 30d \(fmt(w.totalTokens)) tok · \(p.elapsedMs)ms",
                     action: nil,
                     keyEquivalent: ""
                 )
@@ -52,14 +50,14 @@ final class StatusItemController {
             scan.isEnabled = false
             menu.addItem(scan)
         } else {
-            let loading = NSMenuItem(title: "Scanning local usage…", action: nil, keyEquivalent: "")
+            let loading = NSMenuItem(title: "Scanning subscriptions…", action: nil, keyEquivalent: "")
             loading.isEnabled = false
             menu.addItem(loading)
         }
         menu.addItem(.separator())
         menu.addItem(actionItem("Export JSON…", #selector(exportJSON)))
         menu.addItem(actionItem("Export CSV…", #selector(exportCSV)))
-        menu.addItem(actionItem("Upload to Plan Analysis ladder…", #selector(upload)))
+        menu.addItem(actionItem("Upload scanned samples…", #selector(upload)))
         menu.addItem(.separator())
         menu.addItem(actionItem("Quit Plan Analysis", #selector(quit), key: "q"))
         item.menu = menu
@@ -80,5 +78,9 @@ final class StatusItemController {
         if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
         if n >= 1_000 { return String(format: "%.1fk", Double(n) / 1_000) }
         return "\(n)"
+    }
+
+    private func money(_ usd: Double) -> String {
+        String(format: "$%.2f", usd)
     }
 }

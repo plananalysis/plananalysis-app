@@ -11,14 +11,15 @@ CodexBar already covers many providers. This app is narrower and faster:
 - First-class **Export** (JSON / CSV)
 - Opt-in **user ladder** upload to the plan detail page on plananalysis.ai
 
-v0.1 reads local logs only:
+v0.2 **scans subscriptions** the way CodexBar does, then prices local tokens into Equiv. API $. You do not pick a plan.
 
-| Provider | Source | What we count |
+| Provider | Subscription | Spend |
 |---|---|---|
-| Claude | `~/.claude/projects/**/*.jsonl` | `assistant.message.usage` |
-| Codex | `~/.codex/sessions/**/*.jsonl` | `event_msg.token_count.last_token_usage` |
+| Claude | Keychain `Claude Code-credentials` → OAuth usage | JSONL × list price |
+| Codex | `~/.codex/auth.json` JWT `chatgpt_plan_type` | JSONL × list price |
+| Cursor | Cursor.app `state.vscdb` `stripeMembershipType` | plan scanned; token spend later |
 
-No browser cookies, no passwords, no prompt text leave the machine unless you tap **Upload**.
+Upload sends only scanned plans. Guessed / missing logins stay local.
 
 ## Install
 
@@ -35,15 +36,15 @@ Menu → **Export JSON…** or **Export CSV…**. The file is the 5h / 7d / 30d 
 
 ## User ladder
 
-Menu → **Upload to Plan Analysis ladder…** sends only:
+Menu → **Upload scanned samples…** sends:
 
 - display name
-- plan id (`claude-pro`, `gpt-plus`, …)
-- 5h token totals
+- scanned plan id (`cursor-ultra`, `gpt-pro-20x`, …)
+- 30d tokens + Equiv. $
 
-The Worker stores one row per `(plan, display name)` and the plan page can fetch:
+The Worker keeps the latest row per `(plan, name)` and appends a sample. Fetch:
 
-`GET https://plananalysis-ladder.jcyangzh.workers.dev/v1/ladder?plan=claude-pro`
+`GET https://plananalysis-ladder.jcyangzh.workers.dev/v1/ladder?plan=cursor-ultra`
 
 Site embed is a follow-up in `codingplan-site` (`#ladder` on `/en/plans/:id.html`).
 

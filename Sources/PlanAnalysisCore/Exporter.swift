@@ -9,7 +9,7 @@ public enum Exporter {
     }
 
     public static func csvString(from snapshot: UsageSnapshot) -> String {
-        var rows = ["provider,plan_id,window,input_tokens,output_tokens,cache_read_tokens,events,captured_at"]
+        var rows = ["provider,plan_id,plan_label,plan_source,window,input_tokens,output_tokens,cache_read_tokens,equiv_usd,events,captured_at"]
         let stamp = ISO8601DateFormatter().string(from: snapshot.capturedAt)
         for p in snapshot.providers {
             for w in p.windows {
@@ -17,10 +17,13 @@ public enum Exporter {
                     [
                         p.provider.rawValue,
                         p.planId,
+                        csv(p.planLabel),
+                        p.planSource.rawValue,
                         w.kind.rawValue,
                         String(w.inputTokens),
                         String(w.outputTokens),
                         String(w.cacheReadTokens),
+                        String(format: "%.4f", w.equivUsd),
                         String(w.eventCount),
                         stamp,
                     ].joined(separator: ",")
@@ -32,8 +35,8 @@ public enum Exporter {
 
     public static func ladderEntries(from snapshot: UsageSnapshot, displayName: String) -> [LadderEntry] {
         snapshot.providers.compactMap { p in
-            let w = p.window(.hours5)
-            guard w.totalTokens > 0 else { return nil }
+            guard p.canUpload else { return nil }
+            let w = p.window(.month)
             return LadderEntry(
                 planId: p.planId,
                 provider: p.provider.rawValue,
@@ -42,8 +45,16 @@ public enum Exporter {
                 inputTokens: w.inputTokens,
                 outputTokens: w.outputTokens,
                 cacheReadTokens: w.cacheReadTokens,
+                equivUsd: w.equivUsd,
                 capturedAt: snapshot.capturedAt
             )
         }
+    }
+
+    private static func csv(_ s: String) -> String {
+        if s.contains(",") || s.contains("\"") {
+            return "\"\(s.replacingOccurrences(of: "\"", with: "\"\""))\""
+        }
+        return s
     }
 }

@@ -74,12 +74,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let display = (name?.isEmpty == false) ? name! : NSFullUserName()
             let entries = Exporter.ladderEntries(from: snap, displayName: display)
             guard !entries.isEmpty else {
-                present("No 5h usage to upload yet.")
+                present("No scanned subscription to upload yet.")
                 return
             }
+            let lines = entries.map { "\($0.planId)  $\(String(format: "%.2f", $0.equivUsd)) / 30d" }.joined(separator: "\n")
             let alert = NSAlert()
-            alert.messageText = "Upload usage to the Plan Analysis ladder?"
-            alert.informativeText = "Only token totals, plan id, and this display name are sent. No prompts, paths, or credentials.\n\nName: \(display)"
+            alert.messageText = "Upload scanned samples to the Plan Analysis ladder?"
+            alert.informativeText = "Plans come from your local logins, not a picker. Only handle, scanned plan, tokens, and Equiv. $ are sent.\n\nName: \(display)\n\n\(lines)"
             alert.addButton(withTitle: "Upload")
             alert.addButton(withTitle: "Cancel")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
